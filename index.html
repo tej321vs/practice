@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DSA Chatbot</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      height: 100vh;
+      display: flex;
+      background: #f4f6f9;
+    }
+
+    .sidebar {
+      width: 240px;
+      background: #2c3e50;
+      color: white;
+      padding: 20px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s ease;
+    }
+
+    .sidebar.hidden { width: 0; padding: 0; overflow: hidden; }
+
+    .sidebar h2, .sidebar a {
+      margin: 15px 0;
+      color: white;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .main {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      background: #007bff;
+      color: white;
+    }
+
+    .toggle-btn {
+      background: #0056b3;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .chat-box {
+      flex-grow: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 14px;
+      line-height: 1.5;
+    }
+
+    .user { background: #d1e7dd; align-self: flex-end; text-align: right; }
+    .bot { background: #e2e3e5; align-self: flex-start; }
+
+    .input-area {
+      display: flex;
+      padding: 10px;
+      background: #fff;
+      border-top: 1px solid #ccc;
+    }
+
+    .input-area input {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    .input-area button {
+      margin-left: 10px;
+      padding: 10px 15px;
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    #status {
+      font-style: italic;
+      font-size: 14px;
+      margin: 5px 15px;
+      color: #888;
+    }
+
+    #micBtn {
+      margin-left: 10px;
+      background: red;
+      color: white;
+      border: none;
+      padding: 10px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    img.dsa-image {
+      max-width: 100%;
+      margin-top: 10px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <h2>DSA Bot</h2>
+    <a onclick="newChat()">➕ New Chat</a>
+    <a>🕘 History</a>
+    <a>⚙️ Settings</a>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <div class="header">
+      <span>Ask me anything about DSA</span>
+      <button class="toggle-btn" onclick="toggleSidebar()">☰</button>
+    </div>
+
+    <div id="status"></div>
+    <div class="chat-box" id="chatBox"></div>
+
+    <div class="input-area">
+      <input type="text" id="userInput" placeholder="Ask about DSA...">
+      <button onclick="sendMessage()">Send</button>
+      <button id="micBtn" onclick="startListening()">🎤</button>
+    </div>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    const API_URL = 'http://localhost:3000/chat';
+    const API_KEY = 'AIzaSyBAcSi9ToAbYGeqqvKijDAXzbm-0ySsiQc'; // Replace with your actual .env API key
+    const chatBox = document.getElementById('chatBox');
+    const status = document.getElementById('status');
+    let micUsed = false; // only speak if mic was used
+
+    function appendMessage(message, type, imageUrl = null) {
+      const msg = document.createElement('div');
+      msg.className = 'message ' + type;
+      msg.textContent = message;
+
+      if (imageUrl) {
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.className = 'dsa-image';
+        msg.appendChild(document.createElement('br'));
+        msg.appendChild(img);
+      }
+
+      chatBox.appendChild(msg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('hidden');
+    }
+
+    function newChat() {
+      chatBox.innerHTML = '';
+      status.textContent = '';
+    }
+
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('userInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      appendMessage(message, 'user');
+      input.value = '';
+      status.textContent = 'Analyzing...';
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY
+          },
+          body: JSON.stringify({ message })
+        });
+
+        status.textContent = 'Generating response...';
+
+        const data = await res.json();
+        if (res.ok) {
+          appendMessage(data.reply, 'bot', data.image);
+          if (micUsed) {
+            speak(data.reply);
+            micUsed = false; // reset
+          }
+        } else {
+          appendMessage(`❌ ${data.error}`, 'bot');
+        }
+      } catch (err) {
+        appendMessage('❌ Failed to connect to server.', 'bot');
+      }
+
+      status.textContent = '';
+    }
+
+    function startListening() {
+      micUsed = true;
+      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = 'en-US';
+      recognition.start();
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById('userInput').value = transcript;
+        sendMessage(); // auto-submit
+      };
+
+      recognition.onerror = () => {
+        alert('🎤 Voice recognition failed.');
+      };
+    }
+  </script>
+
+</body>
+</html>
